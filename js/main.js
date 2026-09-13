@@ -2,10 +2,12 @@
 
 import { SpeechEngine } from "./tts.js";
 import { ChatEngine } from "./chat.js";
-import { CustomFace } from "./customface.js";
+import { HologramFace } from "./hologram.js";
 
-// ?avatar=human loads the realistic rigged avatar (TalkingHead) instead.
-const USE_HUMAN = new URLSearchParams(location.search).get("avatar") === "human";
+// default: halftone hologram of the rigged human avatar.
+// ?avatar=dots  -> legacy geometric dot cloud
+// ?avatar=human -> plain realistic avatar, no hologram effect
+const AVATAR_MODE = new URLSearchParams(location.search).get("avatar") || "hologram";
 
 const el = {
   avatar: document.getElementById("avatar"),
@@ -23,6 +25,9 @@ const el = {
   wake: document.getElementById("wake"),
   wakeVoice: document.getElementById("wake-voice"),
   wakeText: document.getElementById("wake-text"),
+  wakeLoader: document.getElementById("wake-loader"),
+  wakeLoaderText: document.getElementById("wake-loader-text"),
+  wakeLoaderBar: document.getElementById("wake-loader-bar"),
 };
 
 let avatar;
@@ -73,9 +78,9 @@ async function speak(text) {
     const ok = await speech.whenReady();
     if (!ok) { // Kokoro genuinely can't run on this device — silent fallback
       showSubtitle(text);
-      if (avatar instanceof CustomFace) avatar.startFakeTalk();
+      avatar.startFakeTalk?.();
       await speech.speakFallback(text);
-      if (avatar instanceof CustomFace) avatar.stopFakeTalk();
+      avatar.stopFakeTalk?.();
       showSubtitle(null);
       return;
     }
@@ -83,36 +88,50 @@ async function speak(text) {
   setStatus("Speaking…", "ready");
   const data = await speech.synthesizeKokoro(text);
   showSubtitle(text);
-  if (avatar instanceof CustomFace) {
-    await avatar.speakAudio(data, speech.audioCtx);
-  } else {
-    await avatar.speakAudio(data);
-  }
+  await avatar.speakAudio(data, speech.audioCtx);
   showSubtitle(null);
 }
 
 // ---------- boot ----------
+function setWakeLoading(text, pct) {
+  el.wakeLoaderText.textContent = text;
+  if (pct != null) el.wakeLoaderBar.style.width = `${pct}%`;
+}
+
 async function boot() {
-  setStatus("Loading avatar…", "booting");
+  el.wakeVoice.disabled = true;
+  el.wakeText.disabled = true;
+  setStatus("Materializing…", "booting");
+  setWakeLoading("MATERIALIZING FACE…", 4);
   try {
-    if (USE_HUMAN) {
+    if (AVATAR_MODE === "human") {
       const { Avatar } = await import("./avatar.js");
       avatar = new Avatar(el.avatar);
-    } else {
+    } else if (AVATAR_MODE === "dots") {
+      const { CustomFace } = await import("./customface.js");
       avatar = new CustomFace(el.avatar);
+      avatar.onPoke = onPoke;
+    } else {
+      avatar = new HologramFace(el.avatar);
       avatar.onPoke = onPoke;
     }
     await avatar.init((ev) => {
       if (ev && ev.total) {
         const pct = Math.min(100, Math.round((ev.loaded / ev.total) * 100));
-        setStatus(`Loading avatar… ${pct}%`, "booting");
+        setWakeLoading(`MATERIALIZING FACE… ${pct}%`, 4 + pct * 0.7);
+        setStatus(`Loading… ${pct}%`, "booting");
       }
     });
   } catch (err) {
     console.error("Avatar failed to load:", err);
     setStatus("Avatar failed — check console", "error");
+    setWakeLoading("MATERIALIZATION FAILED — RELOAD THE PAGE", 100);
     return;
   }
+  setWakeLoading("READY", 100);
+  el.wakeLoader.classList.add("done");
+  el.wakeVoice.disabled = false;
+  el.wakeText.disabled = false;
   setStatus("Waiting to wake…", "booting");
   speech.loadKokoro((msg) => setStatus(msg, speech.ready ? "ready" : "booting"));
   voice.setup();
@@ -126,12 +145,13 @@ async function wake(withVoice) {
   // greet once the voice is ready
   busy = true;
   voice.pause();
-  if (avatar instanceof CustomFace) avatar.setEmotion(GREETING.emotion);
+  avatar.setEmotion?.(GREETING.emotion);
   addMsg(GREETING.text, "ai");
   try { await speak(GREETING.text); } catch (e) { console.warn(e); }
   busy = false;
   voice.resume();
   idleStatus();
+  voice.drainPending();
 }
 
 el.wakeVoice.addEventListener("click", () => wake(true));
@@ -158,10 +178,22 @@ async function onPoke() {
 
 // ---------- conversation ----------
 async function handleUserText(text) {
-  if (busy || !text.trim()) return;
+  if (!text.trim()) return;
+  if (busy) { voice.pending = text; return; } // never silently drop what the user said
   busy = true;
   el.send.disabled = true;
   voice.pause(); // don't listen to our own voice
+
+  // watchdog: whatever happens, PROSOPO must never hang unresponsive
+  const watchdog = setTimeout(() => {
+    console.warn("Watchdog: conversation step took too long — recovering.");
+    busy = false;
+    el.send.disabled = false;
+    avatar.stopThinking?.();
+    avatar.stopFakeTalk?.();
+    voice.resume();
+    setStatus("Recovered — ask me again", "error");
+  }, 60000);
 
   addMsg(text, "user");
   el.input.value = "";
@@ -180,16 +212,17 @@ async function handleUserText(text) {
   avatar.stopThinking?.();
   thinkingMsg.classList.remove("thinking");
   thinkingMsg.textContent = reply.text;
-  if (avatar instanceof CustomFace) avatar.setEmotion(reply.emotion);
-  else avatar.setMood?.(reply.emotion === "laugh" ? "happy" : reply.emotion);
+  avatar.setEmotion?.(reply.emotion);
 
   try { await speak(reply.text); } catch (err) { console.warn("Speech failed:", err); }
 
+  clearTimeout(watchdog);
   el.send.disabled = false;
   busy = false;
   voice.resume();
   idleStatus();
   if (!el.chatPanel.hidden) el.input.focus();
+  voice.drainPending();
 }
 
 el.form.addEventListener("submit", (e) => {
@@ -209,6 +242,16 @@ const voice = {
   mode: false,
   rec: null,
   paused: false,
+  pending: null,
+
+  // speak anything the user said while PROSOPO was busy
+  drainPending() {
+    if (this.pending && !busy) {
+      const t = this.pending;
+      this.pending = null;
+      handleUserText(t);
+    }
+  },
 
   setup() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -223,13 +266,16 @@ const voice = {
     this.rec = new SR();
     this.rec.lang = "en-US";
     this.rec.continuous = true;
-    this.rec.interimResults = false;
+    this.rec.interimResults = true; // live "heard you" feedback
 
     this.rec.onresult = (e) => {
       const res = e.results[e.results.length - 1];
+      const text = res[0].transcript.trim();
       if (res.isFinal) {
-        const text = res[0].transcript.trim();
         if (text) handleUserText(text);
+      } else if (text && !busy) {
+        // show what is being heard so listening is never a mystery
+        setStatus(`Hearing: ${text.slice(-42)}`, "ready");
       }
     };
     this.rec.onend = () => {
