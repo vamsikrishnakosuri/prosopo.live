@@ -4,6 +4,7 @@ import { SpeechEngine } from "./tts.js";
 import { ChatEngine } from "./chat.js";
 import { HologramFace } from "./hologram.js";
 import { personaMemory } from "./memory.js";
+import { LITE_MODE } from "./device.js";
 
 // default: halftone hologram of the rigged human avatar.
 // ?avatar=dots  -> legacy geometric dot cloud
@@ -103,22 +104,24 @@ function idleStatus() {
 }
 
 // ---------- speaking ----------
-// English: Kokoro HD girl voice. Telugu: native Google neural voice via our
-// backend (real Telugu pronunciation). Browser voice only as last resort.
+// English: Kokoro HD girl voice (desktop). Telugu — and English on
+// low-memory devices (iPhone) — use the lightweight server voice.
+// Browser voice only as last resort.
 async function speak(text, lang = currentLang) {
-  if (lang === "te") {
+  if (lang === "te" || LITE_MODE) {
+    const remoteLang = lang === "te" ? "te" : "en";
     try {
       setStatus("Speaking…", "ready");
-      const data = await speech.synthesizeRemote(text, "te");
+      const data = await speech.synthesizeRemote(text, remoteLang);
       showSubtitle(text);
       await avatar.speakAudio(data, speech.audioCtx);
       showSubtitle(null);
       return;
     } catch (err) {
-      console.warn("Telugu TTS failed, using browser voice:", err);
+      console.warn("Remote TTS failed, using browser voice:", err);
       showSubtitle(text);
       avatar.startFakeTalk?.();
-      await speech.speakFallback(text, "te");
+      await speech.speakFallback(text, remoteLang);
       avatar.stopFakeTalk?.();
       showSubtitle(null);
       return;
@@ -187,11 +190,17 @@ async function boot() {
   el.wakeText.disabled = false;
   setStatus("Waiting to wake…", "booting");
   const rocketPct = document.getElementById("rocket-pct");
-  speech.loadKokoro((msg, pct) => {
-    setStatus(msg, speech.ready ? "ready" : "booting");
-    if (!el.loader.hidden) el.loaderText.textContent = msg.toUpperCase();
-    if (pct != null) rocketPct.textContent = pct;
-  });
+  if (LITE_MODE) {
+    // iPhone/low-memory: never load the 300MB in-browser voice — the
+    // server voice is used instead and the page stays stable
+    setStatus("Waiting to wake…", "booting");
+  } else {
+    speech.loadKokoro((msg, pct) => {
+      setStatus(msg, speech.ready ? "ready" : "booting");
+      if (!el.loader.hidden) el.loaderText.textContent = msg.toUpperCase();
+      if (pct != null) rocketPct.textContent = pct;
+    });
+  }
   voice.setup();
 }
 

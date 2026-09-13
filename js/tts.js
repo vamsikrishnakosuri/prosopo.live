@@ -113,7 +113,11 @@ export class SpeechEngine {
 
     const durationMs = merged.duration * 1000;
     const { words, wtimes, wdurations } = estimateWordTimings(text, durationMs);
-    const lipWords = words.map((w) => "la".repeat(Math.max(1, Math.round(w.length / 2))));
+    // Latin text lip-syncs directly; non-Latin (Telugu script) gets
+    // speakable pseudo-syllables so the mouth still moves
+    const lipWords = /[ఀ-౿]/.test(text)
+      ? words.map((w) => "la".repeat(Math.max(1, Math.round(w.length / 2))))
+      : words;
     return { audio: merged, words: lipWords, wtimes, wdurations };
   }
 

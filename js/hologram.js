@@ -16,8 +16,12 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
+import { LITE_MODE } from "./device.js";
+
 const AVATAR_URL = "/assets/avatar.glb";
-const SRC_W = 640, SRC_H = 820; // hidden realistic render size
+// hidden realistic render size (smaller on low-memory devices)
+const SRC_W = LITE_MODE ? 460 : 640;
+const SRC_H = LITE_MODE ? 590 : 820;
 
 export const EMOTIONS = {
   neutral:   { color: 0xd6ecff, mood: "neutral" },
@@ -138,8 +142,8 @@ export class HologramFace {
 
     // ---- visible hologram scene ----
     const w = this.container.clientWidth, h = this.container.clientHeight;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer = new THREE.WebGLRenderer({ antialias: !LITE_MODE });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, LITE_MODE ? 1.3 : 2));
     this.renderer.setSize(w, h);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.container.appendChild(this.renderer.domElement);
@@ -177,7 +181,9 @@ export class HologramFace {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.7, 0.35);
+    // half-resolution bloom on low-memory devices
+    const bloomRes = LITE_MODE ? new THREE.Vector2(w / 2, h / 2) : new THREE.Vector2(w, h);
+    this.bloom = new UnrealBloomPass(bloomRes, 0.5, 0.7, 0.35);
     this.composer.addPass(this.bloom);
 
     this.raycaster = new THREE.Raycaster();
