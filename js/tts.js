@@ -86,19 +86,35 @@ export class SpeechEngine {
   }
 
   // Native-quality voice for Telugu (and other Indic languages) via our
-  // backend TTS proxy. Returns the same speech shape as Kokoro, with
-  // pseudo-syllable words so the avatar's lips still animate in sync.
+  // backend TTS proxy. The endpoint only speaks ~200 chars per request, so
+  // long replies are split into sentence chunks, fetched in parallel and
+  // stitched into one seamless AudioBuffer. Pseudo-syllable words keep the
+  // avatar's lips animating (non-Latin text yields no visemes).
   async synthesizeRemote(text, lang) {
     const ctx = this.ensureAudioCtx();
-    const res = await fetch(`/api/tts?lang=${lang}&q=${encodeURIComponent(text)}`);
-    if (!res.ok) throw new Error(`tts ${res.status}`);
-    const buffer = await ctx.decodeAudioData(await res.arrayBuffer());
-    const durationMs = buffer.duration * 1000;
+    const chunks = splitTtsChunks(text, 170);
+    const buffers = await Promise.all(chunks.map(async (chunk) => {
+      const res = await fetch(`/api/tts?lang=${lang}&q=${encodeURIComponent(chunk)}`);
+      if (!res.ok) throw new Error(`tts ${res.status}`);
+      return ctx.decodeAudioData(await res.arrayBuffer());
+    }));
+
+    // concatenate with a small natural pause between chunks
+    const rate = buffers[0].sampleRate;
+    const gap = Math.round(rate * 0.18);
+    const total = buffers.reduce((n, b) => n + b.length, 0) + gap * (buffers.length - 1);
+    const merged = ctx.createBuffer(1, total, rate);
+    const out = merged.getChannelData(0);
+    let offset = 0;
+    for (let i = 0; i < buffers.length; i++) {
+      out.set(buffers[i].getChannelData(0), offset);
+      offset += buffers[i].length + gap;
+    }
+
+    const durationMs = merged.duration * 1000;
     const { words, wtimes, wdurations } = estimateWordTimings(text, durationMs);
-    // non-Latin words produce no visemes in the lipsync module — substitute
-    // speakable syllables of similar length so the mouth moves naturally
     const lipWords = words.map((w) => "la".repeat(Math.max(1, Math.round(w.length / 2))));
-    return { audio: buffer, words: lipWords, wtimes, wdurations };
+    return { audio: merged, words: lipWords, wtimes, wdurations };
   }
 
   // Browser speechSynthesis — used for non-English languages (and as a
@@ -130,6 +146,36 @@ export class SpeechEngine {
   stop() {
     try { speechSynthesis.cancel(); } catch { /* ignore */ }
   }
+}
+
+// Split long text into TTS-friendly chunks at sentence/phrase boundaries.
+function splitTtsChunks(text, maxLen) {
+  const parts = text.split(/(?<=[.!?।…])\s+|\n+/).filter(Boolean);
+  const chunks = [];
+  let cur = "";
+  for (const part of parts) {
+    if ((cur + " " + part).trim().length <= maxLen) {
+      cur = (cur + " " + part).trim();
+    } else {
+      if (cur) chunks.push(cur);
+      if (part.length <= maxLen) {
+        cur = part;
+      } else {
+        // very long sentence: split on commas/spaces
+        let rest = part;
+        while (rest.length > maxLen) {
+          let cut = rest.lastIndexOf(",", maxLen);
+          if (cut < maxLen * 0.4) cut = rest.lastIndexOf(" ", maxLen);
+          if (cut <= 0) cut = maxLen;
+          chunks.push(rest.slice(0, cut).trim());
+          rest = rest.slice(cut + 1).trim();
+        }
+        cur = rest;
+      }
+    }
+  }
+  if (cur) chunks.push(cur);
+  return chunks.length ? chunks : [text.slice(0, maxLen)];
 }
 
 // Split text into words and spread the total duration across them,
