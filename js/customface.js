@@ -17,10 +17,12 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
 const MODEL_URL = "/assets/prosopo.glb";
-const MAX_POINTS = 30000;
+const TARGET_POINTS = 70000;
+// key light for baked point shading (head front = +Z in glTF space)
+const LIGHT_DIR = { x: 0.15, y: 0.35, z: 0.93 };
 
 export const EMOTIONS = {
-  neutral:   { color: 0x00e5ff, morphs: {} },
+  neutral:   { color: 0xbfe4ff, morphs: {} }, // ice-white hologram
   happy:     { color: 0x2bffc9, morphs: { smile: 0.7, eyeSquint: 0.25 } },
   laugh:     { color: 0xffd24a, morphs: { smile: 1.0, eyeSquint: 0.55 }, motion: "laugh" },
   sad:       { color: 0x3f6cff, morphs: { frown: 0.7, eyeSquint: 0.15 }, motion: "sad" },
@@ -130,70 +132,113 @@ export class CustomFace {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.75, 0.8, 0.35);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.95, 0.8, 0.3);
     this.composer.addPass(this.bloom);
 
     this.raycaster = new THREE.Raycaster();
     this.renderer.domElement.addEventListener("pointerdown", (e) => this.handlePointer(e));
 
     window.addEventListener("resize", () => this.onResize());
+    window.PROSOPO_FACE = this; // debug handle
     this.animate();
   }
 
+  // Sample TARGET_POINTS points across the mesh SURFACE (area-weighted, with
+  // barycentric interpolation of positions, normals and morph deltas), and
+  // bake Lambert shading into each point so the face reads like the VIKI
+  // hologram: bright lit planes, dark eye sockets, visible lips.
   buildPointCloud(mesh) {
     const geo = mesh.geometry;
-    const basePos = geo.attributes.position.array;
-    const total = geo.attributes.position.count;
-    const stride = Math.max(1, Math.ceil(total / MAX_POINTS));
-    const m = Math.floor(total / stride);
+    const pos = geo.attributes.position.array;
+    const nor = geo.attributes.normal.array;
+    const idx = geo.index ? geo.index.array : null;
+    const triCount = idx ? idx.length / 3 : pos.length / 9;
 
+    const morphNames = Object.keys(mesh.morphTargetDictionary);
+    const morphSrc = morphNames.map(
+      (n) => geo.morphAttributes.position[mesh.morphTargetDictionary[n]].array
+    );
+
+    // total surface area
+    const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3();
+    const vert = (t, k) => (idx ? idx[t * 3 + k] : t * 3 + k);
+    let totalArea = 0;
+    const areas = new Float32Array(triCount);
+    for (let t = 0; t < triCount; t++) {
+      const a = vert(t, 0) * 3, b = vert(t, 1) * 3, c = vert(t, 2) * 3;
+      vA.fromArray(pos, a); vB.fromArray(pos, b); vC.fromArray(pos, c);
+      ab.subVectors(vB, vA); ac.subVectors(vC, vA);
+      areas[t] = ab.cross(ac).length() * 0.5;
+      totalArea += areas[t];
+    }
+
+    // allocate
+    const m = TARGET_POINTS;
     this.base = new Float32Array(m * 3);
-    for (let i = 0; i < m; i++) {
-      const s = i * stride * 3;
-      this.base[i * 3] = basePos[s];
-      this.base[i * 3 + 1] = basePos[s + 1];
-      this.base[i * 3 + 2] = basePos[s + 2];
-    }
-
-    // subsampled morph deltas (GLTFLoader stores morphs as relative deltas)
+    this.shade = new Float32Array(m);
+    this.shimmer = new Float32Array(m);
+    this.mouthSeam = new Float32Array(m);
     this.morphDeltas = {};
-    for (const [name, idx] of Object.entries(mesh.morphTargetDictionary)) {
-      const src = geo.morphAttributes.position[idx].array;
-      const d = new Float32Array(m * 3);
-      for (let i = 0; i < m; i++) {
-        const s = i * stride * 3;
-        d[i * 3] = src[s]; d[i * 3 + 1] = src[s + 1]; d[i * 3 + 2] = src[s + 2];
+    for (const n of morphNames) this.morphDeltas[n] = new Float32Array(m * 3);
+
+    const L = LIGHT_DIR;
+    let p = 0, acc = 0;
+    const perPoint = totalArea / m;
+    for (let t = 0; t < triCount && p < m; t++) {
+      acc += areas[t];
+      let n = Math.floor(acc / perPoint);
+      acc -= n * perPoint;
+      for (; n > 0 && p < m; n--) {
+        // random barycentric coords
+        let u = Math.random(), v = Math.random();
+        if (u + v > 1) { u = 1 - u; v = 1 - v; }
+        const w = 1 - u - v;
+        const a = vert(t, 0) * 3, b = vert(t, 1) * 3, c = vert(t, 2) * 3;
+        const px = pos[a] * w + pos[b] * u + pos[c] * v;
+        const py = pos[a + 1] * w + pos[b + 1] * u + pos[c + 1] * v;
+        const pz = pos[a + 2] * w + pos[b + 2] * u + pos[c + 2] * v;
+        this.base[p * 3] = px; this.base[p * 3 + 1] = py; this.base[p * 3 + 2] = pz;
+
+        // interpolated normal → baked Lambert shade
+        const nx = nor[a] * w + nor[b] * u + nor[c] * v;
+        const ny = nor[a + 1] * w + nor[b + 1] * u + nor[c + 1] * v;
+        const nz = nor[a + 2] * w + nor[b + 2] * u + nor[c + 2] * v;
+        const nl = Math.hypot(nx, ny, nz) || 1;
+        const lam = Math.max(0, (nx * L.x + ny * L.y + nz * L.z) / nl);
+        this.shade[p] = 0.06 + 1.05 * Math.pow(lam, 1.35);
+
+        this.shimmer[p] = 0.9 + Math.random() * 0.2;
+
+        // mouth seam mask (glTF space mouth line ≈ (0, 0.15, 0.54))
+        const dm = Math.hypot(px * 0.9, (py - 0.145) * 1.9, (pz - 0.54) * 1.2);
+        this.mouthSeam[p] = Math.max(0, 1 - dm / 0.24);
+
+        // morph deltas interpolated with the same barycentric weights
+        for (let k = 0; k < morphNames.length; k++) {
+          const src = morphSrc[k], dst = this.morphDeltas[morphNames[k]];
+          dst[p * 3] = src[a] * w + src[b] * u + src[c] * v;
+          dst[p * 3 + 1] = src[a + 1] * w + src[b + 1] * u + src[c + 1] * v;
+          dst[p * 3 + 2] = src[a + 2] * w + src[b + 2] * u + src[c + 2] * v;
+        }
+        p++;
       }
-      this.morphDeltas[name] = d;
     }
+    this.count = p;
 
     const pgeo = new THREE.BufferGeometry();
     this.livePos = new Float32Array(this.base);
     pgeo.setAttribute("position", new THREE.BufferAttribute(this.livePos, 3));
-
-    // per-point brightness (digital shimmer) + mouth-region mask
-    this.shimmer = new Float32Array(m);
     const colors = new Float32Array(m * 3);
     this.colorsAttr = new THREE.BufferAttribute(colors, 3);
-    this.mouthIdx = [];
-    for (let i = 0; i < m; i++) {
-      this.shimmer[i] = 0.7 + Math.random() * 0.4;
-      const x = this.base[i * 3], y = this.base[i * 3 + 1], z = this.base[i * 3 + 2];
-      // mouth center in glTF space ≈ (0, 0.15, 0.54)
-      const dm = Math.hypot(x, (y - 0.15) * 1.3, z - 0.54);
-      if (dm < 0.22) this.mouthIdx.push(i);
-    }
     pgeo.setAttribute("color", this.colorsAttr);
-    this.count = m;
 
     const mat = new THREE.PointsMaterial({
-      size: 0.021,
+      size: 0.016,
       map: dotTexture(),
       vertexColors: true,
-      transparent: true,
-      opacity: 0.95,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      alphaTest: 0.05,       // depth-occluded dots (0.45 discards everything — Points alpha is subtle)
+      depthWrite: true,
       sizeAttenuation: true,
     });
     this.pointsMat = mat;
@@ -204,17 +249,21 @@ export class CustomFace {
     this.points.scale.copy(mesh.scale);
     mesh.parent.add(this.points);
 
-    this.refreshColors(1);
+    this.refreshColors();
   }
 
-  refreshColors(count01) {
-    // re-roll a random subset of point brightnesses each frame → shimmer
+  // brightness = baked shade × subtle shimmer × mouth-opening darkness
+  refreshColors() {
     const c = this.colorsAttr.array;
-    const n = Math.floor(this.count * count01);
-    for (let k = 0; k < n; k++) {
-      const i = count01 >= 1 ? k : (Math.random() * this.count) | 0;
-      if (count01 < 1) this.shimmer[i] = 0.7 + Math.random() * 0.4;
-      const b = this.shimmer[i];
+    // re-roll a small subset of shimmer values → gentle digital sparkle
+    const rerolls = (this.count * 0.01) | 0;
+    for (let k = 0; k < rerolls; k++) {
+      const i = (Math.random() * this.count) | 0;
+      this.shimmer[i] = 0.9 + Math.random() * 0.2;
+    }
+    const jawDark = Math.min(1, this.jaw * 1.6);
+    for (let i = 0; i < this.count; i++) {
+      const b = this.shade[i] * this.shimmer[i] * (1 - this.mouthSeam[i] * jawDark * 0.95);
       c[i * 3] = b; c[i * 3 + 1] = b; c[i * 3 + 2] = b;
     }
     this.colorsAttr.needsUpdate = true;
@@ -342,22 +391,13 @@ export class CustomFace {
         for (let i = 0; i < this.livePos.length; i++) this.livePos[i] += d[i] * v;
       }
       this.points.geometry.attributes.position.needsUpdate = true;
-      // digital shimmer + mouth glow while talking
-      this.refreshColors(0.012);
-      if (this.state === "talking") {
-        const c = this.colorsAttr.array;
-        const boost = 1 + this.jaw * 0.9;
-        for (const i of this.mouthIdx) {
-          const b = Math.min(1.6, this.shimmer[i] * boost);
-          c[i * 3] = b; c[i * 3 + 1] = b; c[i * 3 + 2] = b;
-        }
-      }
+      this.refreshColors(); // baked shading + shimmer + dark mouth opening
     }
 
     // ---- head motion: compute targets, then low-pass (no snapping) ----
-    let rx = Math.sin(t * 0.23) * 0.02;
-    let ry = Math.sin(t * 0.35) * 0.05;
-    let py = Math.sin(t * 0.8) * 0.005;
+    let rx = Math.sin(t * 0.23) * 0.014;
+    let ry = Math.sin(t * 0.35) * 0.035;
+    let py = Math.sin(t * 0.8) * 0.004;
     const motion = this.state === "thinking" ? "think" : emo.motion;
     switch (motion) {
       case "laugh": py += Math.abs(Math.sin(t * 11)) * 0.014 * strength; rx += Math.sin(t * 11) * 0.015 * strength; break;
@@ -369,7 +409,7 @@ export class CustomFace {
     }
     rx -= poke * 0.07; // lean back when poked
 
-    const kM = 1 - Math.exp(-dt * 4.5);
+    const kM = 1 - Math.exp(-dt * 3.2);
     this.mot.rx += (rx - this.mot.rx) * kM;
     this.mot.ry += (ry - this.mot.ry) * kM;
     this.mot.py += (py - this.mot.py) * kM;

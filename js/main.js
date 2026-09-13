@@ -30,7 +30,7 @@ const speech = new SpeechEngine();
 const chat = new ChatEngine();
 let busy = false;
 
-const GREETING = { text: "Hey, I'm PROSOPO. Ask me anything — I'm all ears.", emotion: "happy" };
+const GREETING = { text: "Hey, I'm PROSOPO. Ask me anything — I'm all ears.", emotion: "neutral" };
 const POKE_QUIPS = [
   "Hey! Easy with the clicking, friend.",
   "I felt that, you know.",
