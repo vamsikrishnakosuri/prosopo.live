@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PROSOPO — The Face of AI</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js/+esm",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+      "talkinghead": "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.5/modules/talkinghead.mjs"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="stage">
+    <div id="grid-bg"></div>
+    <div id="avatar"></div>
+
+    <header id="hud-top">
+      <div class="logo">PROSOPO<span class="dot">.</span>live</div>
+      <div id="status" class="status">
+        <span id="status-dot" class="status-dot booting"></span>
+        <span id="status-text">Booting…</span>
+      </div>
+    </header>
+
+    <div id="subtitle" class="subtitle" hidden></div>
+
+    <footer id="hud-bottom">
+      <div id="chat-log" class="chat-log" hidden></div>
+      <form id="chat-form" class="chat-form" autocomplete="off">
+        <button type="button" id="mic-btn" class="icon-btn" title="Speak to PROSOPO" hidden>🎙</button>
+        <input id="chat-input" type="text" placeholder="Talk to PROSOPO…" maxlength="500" />
+        <button type="submit" id="send-btn" class="icon-btn send" title="Send">➤</button>
+      </form>
+      <div class="hint" id="hint">Kokoro HD voice loads in the background — first reply may use the basic voice.</div>
+    </footer>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

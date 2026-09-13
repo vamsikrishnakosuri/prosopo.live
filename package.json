@@ -1,0 +1,10 @@
+{
+  "name": "prosopo-live",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PROSOPO — a futuristic AI talking face. 3D avatar + free Hugging Face LLM + in-browser Kokoro TTS.",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs"
+  }
+}
