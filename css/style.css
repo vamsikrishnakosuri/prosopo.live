@@ -71,6 +71,7 @@ html, body {
   padding: 6px 14px;
   backdrop-filter: blur(6px);
 }
+.status.suppressed { opacity: 0; transition: opacity 0.25s ease; }
 .status-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--neon); box-shadow: 0 0 8px var(--neon);

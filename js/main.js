@@ -32,11 +32,16 @@ const el = {
   loaderText: document.getElementById("loader-text"),
 };
 
+const statusPill = document.getElementById("status");
 function showLoader(text) {
   el.loaderText.textContent = text;
   el.loader.hidden = false;
+  statusPill.classList.add("suppressed"); // center loader replaces the corner pill
 }
-function hideLoader() { el.loader.hidden = true; }
+function hideLoader() {
+  el.loader.hidden = true;
+  statusPill.classList.remove("suppressed");
+}
 
 let avatar;
 const speech = new SpeechEngine();
