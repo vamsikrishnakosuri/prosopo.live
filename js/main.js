@@ -50,7 +50,14 @@ let busy = false;
 
 // languages: English + Telugu. Telugu is spoken romanized through the SAME
 // Kokoro girl voice, so the voice never changes character.
-const REC_LANGS = { en: "en-US", te: "te-IN" };
+// English recognition model follows the visitor's region: Indian locales
+// get en-IN (much better with Indian accents — this was the "it hears
+// something else" bug), US and everyone else get their own English variant.
+const NAV_LANG = navigator.language || "en-US";
+const EN_VARIANT = /(-IN|-PK|-LK|-BD)$/i.test(NAV_LANG) || /^(te|hi|ta|kn|ml|mr|bn|gu|pa)/i.test(NAV_LANG)
+  ? "en-IN"
+  : (/^en-/i.test(NAV_LANG) ? NAV_LANG : "en-US");
+const REC_LANGS = { en: EN_VARIANT, te: "te-IN" };
 const GREETINGS = {
   en: "Hey, I'm PROSOPO. Ask me anything — I'm all ears.",
   te: "హాయ్, నేను ప్రోసోపో. ఏదైనా అడగండి — నేను వింటున్నాను.",
@@ -292,19 +299,22 @@ el.form.addEventListener("submit", (e) => {
   handleUserText(el.input.value);
 });
 
-// ---------- language toggle (EN / తెలుగు) ----------
-const langBtn = document.getElementById("lang-btn");
-const langIcon = document.getElementById("lang-icon");
+// ---------- language switch (top bar, always visible) ----------
+const langEn = document.getElementById("lang-en");
+const langTe = document.getElementById("lang-te");
 function setLangUI() {
-  langIcon.textContent = currentLang === "te" ? "తె" : "EN";
-  langBtn.classList.toggle("active", currentLang === "te");
+  langEn.classList.toggle("active", currentLang === "en");
+  langTe.classList.toggle("active", currentLang === "te");
 }
-langBtn.addEventListener("click", () => {
-  currentLang = currentLang === "te" ? "en" : "te";
-  voice.setLang(currentLang);
+function chooseLang(lang) {
+  if (lang === currentLang) return;
+  currentLang = lang;
+  voice.setLang(lang);
   setLangUI();
   idleStatus();
-});
+}
+langEn.addEventListener("click", () => chooseLang("en"));
+langTe.addEventListener("click", () => chooseLang("te"));
 setLangUI();
 
 // ---------- chat panel toggle ----------

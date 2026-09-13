@@ -62,6 +62,32 @@ html, body {
 }
 .logo .dot { color: var(--neon); }
 
+.hud-right { display: flex; align-items: center; gap: 10px; }
+
+.lang-switch {
+  display: flex; gap: 2px;
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+  backdrop-filter: blur(6px);
+}
+.lang-opt {
+  border: none; cursor: pointer;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  transition: all 0.15s ease;
+}
+.lang-opt.active {
+  background: rgba(0, 229, 255, 0.18);
+  color: var(--neon);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.25);
+}
+
 .status {
   display: flex; align-items: center; gap: 8px;
   font-family: var(--mono); font-size: 12px; color: var(--text-dim);
@@ -220,12 +246,12 @@ html, body {
   0%, 100% { transform: translateX(-50%) translateY(0); }
   50%      { transform: translateX(-50%) translateY(4px); }
 }
-/* origin: Earth's horizon at the bottom */
+/* origin: Earth's horizon at the bottom (rendered from the 3D asset) */
 .planet-earth {
-  position: absolute; left: 50%; bottom: -4px;
-  width: 160px;
+  position: absolute; left: 50%; bottom: -150px;
+  width: 190px;
   transform: translateX(-50%);
-  filter: drop-shadow(0 -2px 12px rgba(47, 143, 255, 0.5));
+  filter: drop-shadow(0 -4px 18px rgba(47, 143, 255, 0.55));
 }
 /* star streaks falling = rocket rising */
 .star {

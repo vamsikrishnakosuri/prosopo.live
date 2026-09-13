@@ -21,9 +21,15 @@
 
     <header id="hud-top">
       <div class="logo">PROSOPO<span class="dot">.</span>live</div>
-      <div id="status" class="status">
-        <span id="status-dot" class="status-dot booting"></span>
-        <span id="status-text">Booting…</span>
+      <div class="hud-right">
+        <div class="lang-switch" title="Language — the mic listens in the selected language">
+          <button type="button" id="lang-en" class="lang-opt active">EN</button>
+          <button type="button" id="lang-te" class="lang-opt">తెలుగు</button>
+        </div>
+        <div id="status" class="status">
+          <span id="status-dot" class="status-dot booting"></span>
+          <span id="status-text">Booting…</span>
+        </div>
       </div>
     </header>
 
@@ -58,12 +64,7 @@
           <path class="flame f2" d="M27 68 C28 76 29 80 30 84 C31 80 32 76 33 68"/>
         </svg>
 
-        <svg class="planet-earth" viewBox="0 0 160 44">
-          <circle cx="80" cy="102" r="86" fill="#06203c" stroke="#2f8fff" stroke-width="1.6"/>
-          <path d="M28 32 q10 -8 24 -5 q8 2 12 8" fill="none" stroke="#4fb37f" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
-          <path d="M92 24 q14 -5 26 2 q7 4 12 10" fill="none" stroke="#4fb37f" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
-          <path d="M60 40 q9 -4 18 -1" fill="none" stroke="#4fb37f" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
-        </svg>
+        <img class="planet-earth" src="/assets/earth.png" alt="" />
       </div>
       <div class="loader-text" id="loader-text">ESTABLISHING VOICE LINK…</div>
     </div>
@@ -80,10 +81,6 @@
       </div>
 
       <div class="dock">
-        <button type="button" id="lang-btn" class="dock-btn" title="Switch language — English / Telugu">
-          <span class="dock-icon" id="lang-icon" style="font-family: var(--mono); font-size: 13px; font-weight: 600;">EN</span>
-          <span class="dock-label">Language</span>
-        </button>
         <button type="button" id="mic-btn" class="dock-btn" title="Voice conversation — talk hands-free" hidden>
           <svg class="dock-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
           <span class="dock-label">Voice</span>
