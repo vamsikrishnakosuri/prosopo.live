@@ -3,6 +3,7 @@
 import { SpeechEngine } from "./tts.js";
 import { ChatEngine } from "./chat.js";
 import { HologramFace } from "./hologram.js";
+import { personaMemory } from "./memory.js";
 
 // default: halftone hologram of the rigged human avatar.
 // ?avatar=dots  -> legacy geometric dot cloud
@@ -45,7 +46,9 @@ function hideLoader() {
 
 let avatar;
 const speech = new SpeechEngine();
-const chat = new ChatEngine();
+const chat = new ChatEngine(personaMemory.summary());
+chat.onMemo = (fact) => personaMemory.addFact(fact);
+personaMemory.touch();
 let busy = false;
 
 // languages: English + Telugu. Telugu is spoken romanized through the SAME
@@ -198,10 +201,17 @@ async function wake(withVoice) {
   speech.ensureAudioCtx(); // unlock audio inside the user gesture
   if (withVoice && voice.rec) voice.toggle(); // triggers mic permission prompt
   idleStatus();
-  // greet once the voice is ready, in the user's own language
+  // greet once the voice is ready, in the user's own language — by name
+  // when PROSOPO remembers them
   busy = true;
   voice.pause();
-  const greeting = GREETINGS[currentLang] || GREETINGS.en;
+  const knownName = personaMemory.name();
+  let greeting = GREETINGS[currentLang] || GREETINGS.en;
+  if (knownName) {
+    greeting = currentLang === "te"
+      ? `హాయ్ ${knownName}! మళ్ళీ కలిసినందుకు చాలా సంతోషం. ఎలా ఉన్నావ్?`
+      : `Hey ${knownName}! Good to see you again. How have you been?`;
+  }
   addMsg(greeting, "ai");
   await new Promise((r) => setTimeout(r, 1400)); // let the materialization play
   try { await speak(greeting, currentLang); } catch (e) { console.warn(e); }
@@ -316,6 +326,14 @@ function chooseLang(lang) {
 langEn.addEventListener("click", () => chooseLang("en"));
 langTe.addEventListener("click", () => chooseLang("te"));
 setLangUI();
+
+// ---------- forget-me (wipes browser-local memory) ----------
+document.getElementById("forget-btn").addEventListener("click", () => {
+  personaMemory.clear();
+  addMsg(currentLang === "te"
+    ? "సరే, అన్నీ మర్చిపోయాను. మనం మళ్ళీ కొత్తగా మొదలుపెడదాం!"
+    : "Done — memory wiped. We start completely fresh!", "ai");
+});
 
 // ---------- chat panel toggle ----------
 el.chatBtn.addEventListener("click", () => {

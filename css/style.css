@@ -160,6 +160,16 @@ html, body {
 .msg.ai { align-self: flex-start; color: var(--text); background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255,255,255,0.07); }
 .msg.ai.thinking { color: var(--text-dim); font-style: italic; }
 
+.forget-btn {
+  display: block;
+  margin: 8px auto 0;
+  background: none; border: none; cursor: pointer;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1px;
+  color: var(--text-dim);
+  text-decoration: underline dotted;
+}
+.forget-btn:hover { color: var(--danger); }
+
 .chat-form {
   display: flex; gap: 8px; align-items: center;
   background: var(--panel);

@@ -41,6 +41,19 @@ Player Me export format). To use a custom face made in Blender/Meshy:
 2. Export as `.glb`, drop it in `assets/`, and change `DEFAULT_AVATAR_URL`
    in `js/avatar.js`.
 
+## Improving the brain over time (no code needed)
+
+- **Swap models in 30 seconds**: set `HF_MODEL` in Vercel → Environment
+  Variables to any model from the HF router (then redeploy). Free models
+  improve monthly — this is the upgrade channel. Current default:
+  `Qwen/Qwen3-235B-A22B-Instruct-2507` (best free Telugu as of Sep 2026).
+- **Gemini**: set `GEMINI_API_KEY` (free at aistudio.google.com/apikey) and
+  PROSOPO switches to Google Gemini automatically (`GEMINI_MODEL` optional).
+- **Persona**: tone is example-driven — edit the STYLE EXAMPLES block in
+  `js/chat.js` to reshape how PROSOPO talks.
+- **Memory**: PROSOPO remembers lasting facts (name, likes, goals) in the
+  user's own browser only (`js/memory.js`); nothing is stored server-side.
+
 ## Project layout
 
 ```
