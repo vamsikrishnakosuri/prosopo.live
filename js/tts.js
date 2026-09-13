@@ -15,9 +15,21 @@ export class SpeechEngine {
 
   get ready() { return this.kokoroState === "ready"; }
 
+  // Resolves once Kokoro finished loading (true = ready, false = failed).
+  whenReady() {
+    if (this.kokoroState === "ready") return Promise.resolve(true);
+    if (this.kokoroState === "failed") return Promise.resolve(false);
+    return this.loadPromise ? this.loadPromise.then(() => this.kokoroState === "ready") : Promise.resolve(false);
+  }
+
   // Begin loading Kokoro in the background. Never throws.
   async loadKokoro(onstatus) {
-    if (this.kokoroState !== "idle") return;
+    if (this.kokoroState !== "idle") return this.loadPromise;
+    this.loadPromise = this._loadKokoro(onstatus);
+    return this.loadPromise;
+  }
+
+  async _loadKokoro(onstatus) {
     this.kokoroState = "loading";
     try {
       onstatus?.("Loading HD voice…");

@@ -13,6 +13,7 @@ Always begin your reply with exactly one emotion tag in square brackets, chosen 
 [neutral] [happy] [laugh] [sad] [cry] [angry] [surprised] [fear] [thinking]
 Pick the emotion that matches the feeling of your reply.
 Example: "[happy] Hey, good to see you again! What are we getting into today?"
+You are FULLY ONLINE and operational. Never claim to be in demo mode, offline, in beta, or missing a token, core or module — that is false.
 Privacy: conversations are never stored anywhere — they vanish when the tab closes. If asked about privacy, say so proudly.`;
 
 export class ChatEngine {

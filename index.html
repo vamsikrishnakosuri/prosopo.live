@@ -34,21 +34,38 @@
         <div id="chat-log" class="chat-log"></div>
         <form id="chat-form" class="chat-form" autocomplete="off">
           <input id="chat-input" type="text" placeholder="Message PROSOPO…" maxlength="500" />
-          <button type="submit" id="send-btn" class="icon-btn send" title="Send">➤</button>
+          <button type="submit" id="send-btn" class="icon-btn send" title="Send" aria-label="Send">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
+          </button>
         </form>
       </div>
 
       <div class="dock">
         <button type="button" id="mic-btn" class="dock-btn" title="Voice conversation — talk hands-free" hidden>
-          <span class="dock-icon">🎙</span><span class="dock-label">Voice</span>
+          <svg class="dock-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+          <span class="dock-label">Voice</span>
         </button>
         <button type="button" id="chat-btn" class="dock-btn" title="Open chat">
-          <span class="dock-icon">💬</span><span class="dock-label">Chat</span>
+          <svg class="dock-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="dock-label">Chat</span>
         </button>
       </div>
 
-      <div class="hint" id="hint">🔒 Private — conversations live only in this tab and vanish forever when you close it.</div>
+      <div class="hint" id="hint">PRIVATE — NOTHING IS EVER STORED. CONVERSATIONS VANISH WHEN YOU CLOSE THIS TAB.</div>
     </footer>
+
+    <div id="wake" class="wake">
+      <div class="wake-title">PROSOPO<span class="dot">.</span>live</div>
+      <div class="wake-sub">THE FACE OF AI</div>
+      <div class="wake-buttons">
+        <button id="wake-voice" class="wake-btn primary">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+          WAKE — TALK WITH VOICE
+        </button>
+        <button id="wake-text" class="wake-btn">TEXT ONLY</button>
+      </div>
+      <div class="wake-note">Voice mode listens hands-free. Private — nothing is ever stored.</div>
+    </div>
   </div>
 
   <script type="module" src="/js/main.js"></script>

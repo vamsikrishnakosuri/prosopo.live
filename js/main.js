@@ -20,12 +20,25 @@ const el = {
   mic: document.getElementById("mic-btn"),
   chatBtn: document.getElementById("chat-btn"),
   hint: document.getElementById("hint"),
+  wake: document.getElementById("wake"),
+  wakeVoice: document.getElementById("wake-voice"),
+  wakeText: document.getElementById("wake-text"),
 };
 
 let avatar;
 const speech = new SpeechEngine();
 const chat = new ChatEngine();
 let busy = false;
+
+const GREETING = { text: "Hey, I'm PROSOPO. Ask me anything — I'm all ears.", emotion: "happy" };
+const POKE_QUIPS = [
+  "Hey! Easy with the clicking, friend.",
+  "I felt that, you know.",
+  "Poking the hologram. Classic.",
+  "Yes? Can I help you with something?",
+  "Careful — I'm made of very sensitive photons.",
+];
+let lastQuip = 0;
 
 // ---------- UI helpers ----------
 function setStatus(text, state = "ready") {
@@ -52,6 +65,32 @@ function idleStatus() {
   setStatus(voice.mode ? "Listening…" : "Online", "ready");
 }
 
+// ---------- speaking (one consistent voice — Kokoro) ----------
+async function speak(text) {
+  // Wait for the HD voice instead of switching voices mid-conversation.
+  if (!speech.ready) {
+    setStatus("Voice warming up…", "booting");
+    const ok = await speech.whenReady();
+    if (!ok) { // Kokoro genuinely can't run on this device — silent fallback
+      showSubtitle(text);
+      if (avatar instanceof CustomFace) avatar.startFakeTalk();
+      await speech.speakFallback(text);
+      if (avatar instanceof CustomFace) avatar.stopFakeTalk();
+      showSubtitle(null);
+      return;
+    }
+  }
+  setStatus("Speaking…", "ready");
+  const data = await speech.synthesizeKokoro(text);
+  showSubtitle(text);
+  if (avatar instanceof CustomFace) {
+    await avatar.speakAudio(data, speech.audioCtx);
+  } else {
+    await avatar.speakAudio(data);
+  }
+  showSubtitle(null);
+}
+
 // ---------- boot ----------
 async function boot() {
   setStatus("Loading avatar…", "booting");
@@ -61,6 +100,7 @@ async function boot() {
       avatar = new Avatar(el.avatar);
     } else {
       avatar = new CustomFace(el.avatar);
+      avatar.onPoke = onPoke;
     }
     await avatar.init((ev) => {
       if (ev && ev.total) {
@@ -73,12 +113,47 @@ async function boot() {
     setStatus("Avatar failed — check console", "error");
     return;
   }
-
-  setStatus("Online", "ready");
-  speech.loadKokoro((msg) => {
-    el.hint.textContent = `🔒 Private — nothing is ever stored. · ${msg}`;
-  });
+  setStatus("Waiting to wake…", "booting");
+  speech.loadKokoro((msg) => setStatus(msg, speech.ready ? "ready" : "booting"));
   voice.setup();
+}
+
+async function wake(withVoice) {
+  el.wake.classList.add("hidden");
+  speech.ensureAudioCtx(); // unlock audio inside the user gesture
+  if (withVoice && voice.rec) voice.toggle(); // triggers mic permission prompt
+  idleStatus();
+  // greet once the voice is ready
+  busy = true;
+  voice.pause();
+  if (avatar instanceof CustomFace) avatar.setEmotion(GREETING.emotion);
+  addMsg(GREETING.text, "ai");
+  try { await speak(GREETING.text); } catch (e) { console.warn(e); }
+  busy = false;
+  voice.resume();
+  idleStatus();
+}
+
+el.wakeVoice.addEventListener("click", () => wake(true));
+el.wakeText.addEventListener("click", () => {
+  el.chatPanel.hidden = false;
+  el.chatBtn.classList.add("active");
+  wake(false);
+});
+
+// ---------- poke reaction ----------
+async function onPoke() {
+  if (busy) return;
+  const now = Date.now();
+  if (now - lastQuip < 8000 || !speech.ready) return; // visual reaction only
+  lastQuip = now;
+  const quip = POKE_QUIPS[(Math.random() * POKE_QUIPS.length) | 0];
+  busy = true;
+  voice.pause();
+  try { await speak(quip); } catch (e) { console.warn(e); }
+  busy = false;
+  voice.resume();
+  idleStatus();
 }
 
 // ---------- conversation ----------
@@ -99,7 +174,7 @@ async function handleUserText(text) {
     reply = await chat.send(text.trim());
   } catch (err) {
     console.error(err);
-    reply = { text: "My connection to the neural core failed. Try again in a moment.", emotion: "sad" };
+    reply = { text: "Hmm, I lost my train of thought. Ask me again?", emotion: "sad" };
   }
 
   avatar.stopThinking?.();
@@ -108,27 +183,8 @@ async function handleUserText(text) {
   if (avatar instanceof CustomFace) avatar.setEmotion(reply.emotion);
   else avatar.setMood?.(reply.emotion === "laugh" ? "happy" : reply.emotion);
 
-  setStatus("Speaking…", "ready");
-  try {
-    if (speech.ready) {
-      const speechData = await speech.synthesizeKokoro(reply.text);
-      showSubtitle(reply.text);
-      if (avatar instanceof CustomFace) {
-        await avatar.speakAudio(speechData, speech.audioCtx);
-      } else {
-        await avatar.speakAudio(speechData);
-      }
-    } else {
-      showSubtitle(reply.text);
-      if (avatar instanceof CustomFace) avatar.startFakeTalk();
-      await speech.speakFallback(reply.text);
-      if (avatar instanceof CustomFace) avatar.stopFakeTalk();
-    }
-  } catch (err) {
-    console.warn("Speech failed:", err);
-  }
+  try { await speak(reply.text); } catch (err) { console.warn("Speech failed:", err); }
 
-  showSubtitle(null);
   el.send.disabled = false;
   busy = false;
   voice.resume();
@@ -156,7 +212,12 @@ const voice = {
 
   setup() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { el.chatPanel.hidden = false; el.chatBtn.classList.add("active"); return; }
+    if (!SR) {
+      el.wakeVoice.hidden = true; // no voice support in this browser
+      el.chatPanel.hidden = false;
+      el.chatBtn.classList.add("active");
+      return;
+    }
     el.mic.hidden = false;
 
     this.rec = new SR();
@@ -171,7 +232,6 @@ const voice = {
         if (text) handleUserText(text);
       }
     };
-    // Auto-restart: keeps listening without pressing the button again
     this.rec.onend = () => {
       if (this.mode && !this.paused) {
         setTimeout(() => { try { this.rec.start(); } catch { /* already running */ } }, 250);
@@ -182,6 +242,8 @@ const voice = {
         this.mode = false;
         this.updateButton();
         setStatus("Mic blocked — allow microphone access", "error");
+        el.chatPanel.hidden = false;
+        el.chatBtn.classList.add("active");
       }
     };
 
