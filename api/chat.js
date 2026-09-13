@@ -2,6 +2,9 @@
 import { chatCompletion, validateMessages } from "../lib/hf.mjs";
 
 export default async function handler(req, res) {
+  // Privacy: stateless endpoint — messages are forwarded to the model and
+  // never logged or stored anywhere.
+  res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") {
     res.status(405).json({ error: "POST only" });
     return;

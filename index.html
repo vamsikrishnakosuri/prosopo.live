@@ -17,7 +17,6 @@
 </head>
 <body>
   <div id="stage">
-    <div id="grid-bg"></div>
     <div id="avatar"></div>
 
     <header id="hud-top">
@@ -31,13 +30,24 @@
     <div id="subtitle" class="subtitle" hidden></div>
 
     <footer id="hud-bottom">
-      <div id="chat-log" class="chat-log" hidden></div>
-      <form id="chat-form" class="chat-form" autocomplete="off">
-        <button type="button" id="mic-btn" class="icon-btn" title="Speak to PROSOPO" hidden>🎙</button>
-        <input id="chat-input" type="text" placeholder="Talk to PROSOPO…" maxlength="500" />
-        <button type="submit" id="send-btn" class="icon-btn send" title="Send">➤</button>
-      </form>
-      <div class="hint" id="hint">Kokoro HD voice loads in the background — first reply may use the basic voice.</div>
+      <div id="chat-panel" class="chat-panel" hidden>
+        <div id="chat-log" class="chat-log"></div>
+        <form id="chat-form" class="chat-form" autocomplete="off">
+          <input id="chat-input" type="text" placeholder="Message PROSOPO…" maxlength="500" />
+          <button type="submit" id="send-btn" class="icon-btn send" title="Send">➤</button>
+        </form>
+      </div>
+
+      <div class="dock">
+        <button type="button" id="mic-btn" class="dock-btn" title="Voice conversation — talk hands-free" hidden>
+          <span class="dock-icon">🎙</span><span class="dock-label">Voice</span>
+        </button>
+        <button type="button" id="chat-btn" class="dock-btn" title="Open chat">
+          <span class="dock-icon">💬</span><span class="dock-label">Chat</span>
+        </button>
+      </div>
+
+      <div class="hint" id="hint">🔒 Private — conversations live only in this tab and vanish forever when you close it.</div>
     </footer>
   </div>
 

@@ -107,8 +107,17 @@ html, body {
   z-index: 6;
 }
 
+.chat-panel {
+  margin-bottom: 12px;
+  animation: rise 0.25s ease;
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
 .chat-log {
-  max-height: 32vh; overflow-y: auto;
+  max-height: 32vh; min-height: 48px; overflow-y: auto;
   display: flex; flex-direction: column; gap: 8px;
   margin-bottom: 10px;
   padding: 12px;
@@ -153,7 +162,32 @@ html, body {
 }
 .icon-btn:hover { background: rgba(0, 229, 255, 0.2); box-shadow: 0 0 14px var(--neon-soft); }
 .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
-.icon-btn.listening { background: var(--danger); color: #fff; border-color: var(--danger); animation: pulse 1s infinite; }
+/* Dock — the two main controls */
+.dock {
+  display: flex; justify-content: center; gap: 14px;
+}
+.dock-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--mono); font-size: 13px; letter-spacing: 1px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: all 0.18s ease;
+  box-shadow: 0 0 24px rgba(0, 229, 255, 0.06);
+}
+.dock-btn:hover { border-color: var(--neon); box-shadow: 0 0 18px var(--neon-soft); }
+.dock-btn.active {
+  background: rgba(0, 229, 255, 0.18);
+  border-color: var(--neon);
+  color: var(--neon);
+  box-shadow: 0 0 22px var(--neon-soft);
+}
+.dock-btn.listening .dock-icon { animation: pulse 1.1s ease-in-out infinite; }
+.dock-icon { font-size: 17px; }
 
 .hint {
   text-align: center;
