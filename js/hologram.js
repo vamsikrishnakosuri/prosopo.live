@@ -171,7 +171,9 @@ export class HologramFace {
     });
     this.facePlane = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), this.faceMat);
     this.facePlane.position.set(0, 0.12, 0);
+    this.planeW = planeW;
     this.scene.add(this.facePlane);
+    this.fitFace();
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -225,6 +227,17 @@ export class HologramFace {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.composer.setSize(w, h);
+    this.fitFace();
+  }
+
+  // keep the whole face visible on narrow (mobile) screens
+  fitFace() {
+    if (!this.facePlane) return;
+    const dist = this.camera.position.z - this.facePlane.position.z;
+    const visH = 2 * dist * Math.tan((this.camera.fov * Math.PI) / 360);
+    const visW = visH * this.camera.aspect;
+    const fit = Math.min(1, (visW * 0.92) / this.planeW);
+    this.facePlane.scale.setScalar(fit);
   }
 
   setEmotion(name) {

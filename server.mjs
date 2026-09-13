@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chatCompletion, validateMessages } from "./lib/hf.mjs";
+import { fetchTtsAudio } from "./lib/gtts.mjs";
 
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -58,6 +59,25 @@ const server = http.createServer(async (req, res) => {
       console.error(err.message);
       res.writeHead(502, { "Content-Type": "application/json" })
         .end(JSON.stringify({ error: "Upstream model error" }));
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/tts") {
+    const q = url.searchParams.get("q") || "";
+    const lang = url.searchParams.get("lang") || "te";
+    if (!q.trim() || q.length > 400) {
+      res.writeHead(400, { "Content-Type": "application/json" })
+        .end(JSON.stringify({ error: "Invalid text" }));
+      return;
+    }
+    try {
+      const { buffer, contentType } = await fetchTtsAudio(q, lang);
+      res.writeHead(200, { "Content-Type": contentType, "Cache-Control": "no-store" }).end(buffer);
+    } catch (err) {
+      console.error("tts:", err.message);
+      res.writeHead(502, { "Content-Type": "application/json" })
+        .end(JSON.stringify({ error: "TTS unavailable" }));
     }
     return;
   }

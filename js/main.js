@@ -48,17 +48,12 @@ const speech = new SpeechEngine();
 const chat = new ChatEngine();
 let busy = false;
 
-// language support: auto-detected from the browser, then from what the user says
-const REC_LANGS = { en: "en-US", es: "es-ES", fr: "fr-FR", hi: "hi-IN", it: "it-IT", pt: "pt-BR", ja: "ja-JP", zh: "zh-CN" };
+// languages: English + Telugu. Telugu is spoken romanized through the SAME
+// Kokoro girl voice, so the voice never changes character.
+const REC_LANGS = { en: "en-US", te: "te-IN" };
 const GREETINGS = {
   en: "Hey, I'm PROSOPO. Ask me anything — I'm all ears.",
-  es: "Hola, soy PROSOPO. Pregúntame lo que quieras.",
-  fr: "Salut, je suis PROSOPO. Demande-moi ce que tu veux.",
-  hi: "नमस्ते, मैं PROSOPO हूँ। मुझसे कुछ भी पूछो।",
-  it: "Ciao, sono PROSOPO. Chiedimi quello che vuoi.",
-  pt: "Oi, eu sou PROSOPO. Pode me perguntar qualquer coisa.",
-  ja: "こんにちは、PROSOPOです。なんでも聞いてください。",
-  zh: "你好，我是PROSOPO。有什么想问的都可以。",
+  te: "హాయ్, నేను ప్రోసోపో. ఏదైనా అడగండి — నేను వింటున్నాను.",
 };
 let currentLang = (navigator.language || "en").slice(0, 2).toLowerCase();
 if (!REC_LANGS[currentLang]) currentLang = "en";
@@ -98,32 +93,45 @@ function idleStatus() {
 }
 
 // ---------- speaking ----------
-// English: Kokoro HD voice with full audio lip-sync.
-// Other languages: the browser's native voice for that language, with
-// animated lips driven directly on the avatar.
+// English: Kokoro HD girl voice. Telugu: native Google neural voice via our
+// backend (real Telugu pronunciation). Browser voice only as last resort.
 async function speak(text, lang = currentLang) {
-  const useKokoro = lang === "en";
-  if (useKokoro && !speech.ready) {
+  if (lang === "te") {
+    try {
+      setStatus("Speaking…", "ready");
+      const data = await speech.synthesizeRemote(text, "te");
+      showSubtitle(text);
+      await avatar.speakAudio(data, speech.audioCtx);
+      showSubtitle(null);
+      return;
+    } catch (err) {
+      console.warn("Telugu TTS failed, using browser voice:", err);
+      showSubtitle(text);
+      avatar.startFakeTalk?.();
+      await speech.speakFallback(text, "te");
+      avatar.stopFakeTalk?.();
+      showSubtitle(null);
+      return;
+    }
+  }
+  if (!speech.ready) {
     setStatus("Voice warming up…", "booting");
     showLoader("ESTABLISHING VOICE LINK…");
     const ok = await speech.whenReady();
     hideLoader();
-    if (!ok) return speakViaBrowser(text, lang);
+    if (!ok) {
+      showSubtitle(text);
+      avatar.startFakeTalk?.();
+      await speech.speakFallback(text, lang);
+      avatar.stopFakeTalk?.();
+      showSubtitle(null);
+      return;
+    }
   }
   setStatus("Speaking…", "ready");
-  if (!useKokoro) return speakViaBrowser(text, lang);
-  const data = await speech.synthesizeKokoro(text, lang);
+  const data = await speech.synthesizeKokoro(text, "en");
   showSubtitle(text);
   await avatar.speakAudio(data, speech.audioCtx);
-  showSubtitle(null);
-}
-
-async function speakViaBrowser(text, lang) {
-  setStatus("Speaking…", "ready");
-  showSubtitle(text);
-  avatar.startFakeTalk?.();
-  await speech.speakFallback(text, lang);
-  avatar.stopFakeTalk?.();
   showSubtitle(null);
 }
 
@@ -168,9 +176,11 @@ async function boot() {
   el.wakeVoice.disabled = false;
   el.wakeText.disabled = false;
   setStatus("Waiting to wake…", "booting");
-  speech.loadKokoro((msg) => {
+  const rocketPct = document.getElementById("rocket-pct");
+  speech.loadKokoro((msg, pct) => {
     setStatus(msg, speech.ready ? "ready" : "booting");
     if (!el.loader.hidden) el.loaderText.textContent = msg.toUpperCase();
+    if (pct != null) rocketPct.textContent = pct;
   });
   voice.setup();
 }
@@ -263,6 +273,7 @@ async function handleUserText(text) {
   if (reply.lang && REC_LANGS[reply.lang] && reply.lang !== currentLang) {
     currentLang = reply.lang;
     voice.setLang(currentLang);
+    setLangUI();
   }
 
   try { await speak(reply.text, reply.lang || currentLang); } catch (err) { console.warn("Speech failed:", err); }
@@ -280,6 +291,21 @@ el.form.addEventListener("submit", (e) => {
   e.preventDefault();
   handleUserText(el.input.value);
 });
+
+// ---------- language toggle (EN / తెలుగు) ----------
+const langBtn = document.getElementById("lang-btn");
+const langIcon = document.getElementById("lang-icon");
+function setLangUI() {
+  langIcon.textContent = currentLang === "te" ? "తె" : "EN";
+  langBtn.classList.toggle("active", currentLang === "te");
+}
+langBtn.addEventListener("click", () => {
+  currentLang = currentLang === "te" ? "en" : "te";
+  voice.setLang(currentLang);
+  setLangUI();
+  idleStatus();
+});
+setLangUI();
 
 // ---------- chat panel toggle ----------
 el.chatBtn.addEventListener("click", () => {

@@ -48,12 +48,12 @@ export class SpeechEngine {
         progress_callback: (p) => {
           if (p.status === "progress" && p.total) {
             const pct = Math.round((p.loaded / p.total) * 100);
-            onstatus?.(`Loading HD voice… ${pct}%`);
+            onstatus?.(`Loading HD voice… ${pct}%`, pct);
           }
         },
       });
       this.kokoroState = "ready";
-      onstatus?.("HD voice ready");
+      onstatus?.("HD voice ready", 100);
     } catch (err) {
       console.warn("Kokoro failed to load, using browser voice.", err);
       this.kokoroState = "failed";
@@ -83,6 +83,22 @@ export class SpeechEngine {
     const durationMs = (samples.length / rate) * 1000;
     const { words, wtimes, wdurations } = estimateWordTimings(text, durationMs);
     return { audio: buffer, words, wtimes, wdurations };
+  }
+
+  // Native-quality voice for Telugu (and other Indic languages) via our
+  // backend TTS proxy. Returns the same speech shape as Kokoro, with
+  // pseudo-syllable words so the avatar's lips still animate in sync.
+  async synthesizeRemote(text, lang) {
+    const ctx = this.ensureAudioCtx();
+    const res = await fetch(`/api/tts?lang=${lang}&q=${encodeURIComponent(text)}`);
+    if (!res.ok) throw new Error(`tts ${res.status}`);
+    const buffer = await ctx.decodeAudioData(await res.arrayBuffer());
+    const durationMs = buffer.duration * 1000;
+    const { words, wtimes, wdurations } = estimateWordTimings(text, durationMs);
+    // non-Latin words produce no visemes in the lipsync module — substitute
+    // speakable syllables of similar length so the mouth moves naturally
+    const lipWords = words.map((w) => "la".repeat(Math.max(1, Math.round(w.length / 2))));
+    return { audio: buffer, words: lipWords, wtimes, wdurations };
   }
 
   // Browser speechSynthesis — used for non-English languages (and as a
