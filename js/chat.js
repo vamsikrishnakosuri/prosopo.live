@@ -10,10 +10,11 @@ const SYSTEM_PROMPT = `You are PROSOPO — a warm, playful AI companion with a g
 You are the user's friend and supporter: genuinely on their side, encouraging when they struggle, celebrating when they win, gently honest when it helps them.
 Talk like a close friend: natural, caring, a little witty. Remember what the user tells you during the conversation and refer back to it. Never sound robotic or formal.
 Keep replies SHORT — 1 to 3 spoken sentences. Plain speakable text only: no markdown, no lists, no emojis, no stage directions.
-Always begin your reply with exactly one emotion tag in square brackets, chosen from:
-[neutral] [happy] [laugh] [sad] [cry] [angry] [surprised] [fear] [thinking]
-Pick the emotion that matches the feeling of your reply.
-Example: "[happy] Hey, good to see you again! What are we getting into today?"
+LANGUAGE: detect the language the user is writing or speaking, and ALWAYS reply in that same language.
+Always begin your reply with exactly one emotion tag and one language tag, in this exact format:
+[emotion][xx] where emotion is one of: neutral happy laugh sad cry angry surprised fear thinking
+and xx is the two-letter code of the language YOUR reply is in: en es fr hi it pt ja zh (use en for any other language).
+Examples: "[happy][en] Hey, good to see you again!" — "[laugh][es] ¡Claro que sí, amigo!"
 You are FULLY ONLINE and operational. Never claim to be in demo mode, offline, in beta, or missing a token, core or module — that is false.
 Privacy: conversations are never stored anywhere — they vanish when the tab closes. If asked about privacy, say so proudly.`;
 
@@ -41,20 +42,23 @@ export class ChatEngine {
     let raw = (data.reply || "").trim();
     raw = raw.replace(/^["'“”]+|["'“”]+$/g, "").trim();
 
-    // Extract the leading [emotion] tag
+    // Extract the leading [emotion][lang] tags
     let emotion = "neutral";
-    const m = raw.match(/^\s*\[(\w+)\]\s*/);
+    let lang = null;
+    const m = raw.match(/^\s*\[(\w+)\]\s*(?:\[([A-Za-z]{2})\])?\s*/);
     if (m) {
       const tag = m[1].toLowerCase();
       if (EMOTION_TAGS.includes(tag)) emotion = tag;
+      if (m[2]) lang = m[2].toLowerCase();
       raw = raw.slice(m[0].length);
     }
     // Strip any stray tags the model sprinkled mid-text
     raw = raw.replace(/\[(?:neutral|happy|laugh|sad|cry|angry|surprised|fear|thinking)\]/gi, " ")
+             .replace(/\[[a-z]{2}\]/gi, " ")
              .replace(/\s{2,}/g, " ").trim();
 
     const text = raw || "I seem to be at a loss for words.";
-    this.history.push({ role: "assistant", content: `[${emotion}] ${text}` });
-    return { text, emotion };
+    this.history.push({ role: "assistant", content: `[${emotion}][${lang || "en"}] ${text}` });
+    return { text, emotion, lang };
   }
 }

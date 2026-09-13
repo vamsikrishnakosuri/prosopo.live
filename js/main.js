@@ -28,14 +28,36 @@ const el = {
   wakeLoader: document.getElementById("wake-loader"),
   wakeLoaderText: document.getElementById("wake-loader-text"),
   wakeLoaderBar: document.getElementById("wake-loader-bar"),
+  loader: document.getElementById("loader"),
+  loaderText: document.getElementById("loader-text"),
 };
+
+function showLoader(text) {
+  el.loaderText.textContent = text;
+  el.loader.hidden = false;
+}
+function hideLoader() { el.loader.hidden = true; }
 
 let avatar;
 const speech = new SpeechEngine();
 const chat = new ChatEngine();
 let busy = false;
 
-const GREETING = { text: "Hey, I'm PROSOPO. Ask me anything — I'm all ears.", emotion: "neutral" };
+// language support: auto-detected from the browser, then from what the user says
+const REC_LANGS = { en: "en-US", es: "es-ES", fr: "fr-FR", hi: "hi-IN", it: "it-IT", pt: "pt-BR", ja: "ja-JP", zh: "zh-CN" };
+const GREETINGS = {
+  en: "Hey, I'm PROSOPO. Ask me anything — I'm all ears.",
+  es: "Hola, soy PROSOPO. Pregúntame lo que quieras.",
+  fr: "Salut, je suis PROSOPO. Demande-moi ce que tu veux.",
+  hi: "नमस्ते, मैं PROSOPO हूँ। मुझसे कुछ भी पूछो।",
+  it: "Ciao, sono PROSOPO. Chiedimi quello che vuoi.",
+  pt: "Oi, eu sou PROSOPO. Pode me perguntar qualquer coisa.",
+  ja: "こんにちは、PROSOPOです。なんでも聞いてください。",
+  zh: "你好，我是PROSOPO。有什么想问的都可以。",
+};
+let currentLang = (navigator.language || "en").slice(0, 2).toLowerCase();
+if (!REC_LANGS[currentLang]) currentLang = "en";
+
 const POKE_QUIPS = [
   "Hey! Easy with the clicking, friend.",
   "I felt that, you know.",
@@ -70,25 +92,33 @@ function idleStatus() {
   setStatus(voice.mode ? "Listening…" : "Online", "ready");
 }
 
-// ---------- speaking (one consistent voice — Kokoro) ----------
-async function speak(text) {
-  // Wait for the HD voice instead of switching voices mid-conversation.
-  if (!speech.ready) {
+// ---------- speaking ----------
+// English: Kokoro HD voice with full audio lip-sync.
+// Other languages: the browser's native voice for that language, with
+// animated lips driven directly on the avatar.
+async function speak(text, lang = currentLang) {
+  const useKokoro = lang === "en";
+  if (useKokoro && !speech.ready) {
     setStatus("Voice warming up…", "booting");
+    showLoader("ESTABLISHING VOICE LINK…");
     const ok = await speech.whenReady();
-    if (!ok) { // Kokoro genuinely can't run on this device — silent fallback
-      showSubtitle(text);
-      avatar.startFakeTalk?.();
-      await speech.speakFallback(text);
-      avatar.stopFakeTalk?.();
-      showSubtitle(null);
-      return;
-    }
+    hideLoader();
+    if (!ok) return speakViaBrowser(text, lang);
   }
   setStatus("Speaking…", "ready");
-  const data = await speech.synthesizeKokoro(text);
+  if (!useKokoro) return speakViaBrowser(text, lang);
+  const data = await speech.synthesizeKokoro(text, lang);
   showSubtitle(text);
   await avatar.speakAudio(data, speech.audioCtx);
+  showSubtitle(null);
+}
+
+async function speakViaBrowser(text, lang) {
+  setStatus("Speaking…", "ready");
+  showSubtitle(text);
+  avatar.startFakeTalk?.();
+  await speech.speakFallback(text, lang);
+  avatar.stopFakeTalk?.();
   showSubtitle(null);
 }
 
@@ -133,21 +163,26 @@ async function boot() {
   el.wakeVoice.disabled = false;
   el.wakeText.disabled = false;
   setStatus("Waiting to wake…", "booting");
-  speech.loadKokoro((msg) => setStatus(msg, speech.ready ? "ready" : "booting"));
+  speech.loadKokoro((msg) => {
+    setStatus(msg, speech.ready ? "ready" : "booting");
+    if (!el.loader.hidden) el.loaderText.textContent = msg.toUpperCase();
+  });
   voice.setup();
 }
 
 async function wake(withVoice) {
   el.wake.classList.add("hidden");
+  avatar.wakeUp?.(); // dots materialize into the face
   speech.ensureAudioCtx(); // unlock audio inside the user gesture
   if (withVoice && voice.rec) voice.toggle(); // triggers mic permission prompt
   idleStatus();
-  // greet once the voice is ready
+  // greet once the voice is ready, in the user's own language
   busy = true;
   voice.pause();
-  avatar.setEmotion?.(GREETING.emotion);
-  addMsg(GREETING.text, "ai");
-  try { await speak(GREETING.text); } catch (e) { console.warn(e); }
+  const greeting = GREETINGS[currentLang] || GREETINGS.en;
+  addMsg(greeting, "ai");
+  await new Promise((r) => setTimeout(r, 1400)); // let the materialization play
+  try { await speak(greeting, currentLang); } catch (e) { console.warn(e); }
   busy = false;
   voice.resume();
   idleStatus();
@@ -163,14 +198,19 @@ el.wakeText.addEventListener("click", () => {
 
 // ---------- poke reaction ----------
 async function onPoke() {
+  // always show a visible startled reaction
+  const before = avatar.emotion || "neutral";
+  avatar.setEmotion?.("surprised");
+  setTimeout(() => { if ((avatar.emotion || "neutral") === "surprised") avatar.setEmotion?.(before); }, 1400);
+
   if (busy) return;
   const now = Date.now();
-  if (now - lastQuip < 8000 || !speech.ready) return; // visual reaction only
+  if (now - lastQuip < 5000 || !speech.ready) return;
   lastQuip = now;
   const quip = POKE_QUIPS[(Math.random() * POKE_QUIPS.length) | 0];
   busy = true;
   voice.pause();
-  try { await speak(quip); } catch (e) { console.warn(e); }
+  try { await speak(quip, "en"); } catch (e) { console.warn(e); }
   busy = false;
   voice.resume();
   idleStatus();
@@ -214,7 +254,13 @@ async function handleUserText(text) {
   thinkingMsg.textContent = reply.text;
   avatar.setEmotion?.(reply.emotion);
 
-  try { await speak(reply.text); } catch (err) { console.warn("Speech failed:", err); }
+  // follow the user's language: reply tag switches voice + mic language
+  if (reply.lang && REC_LANGS[reply.lang] && reply.lang !== currentLang) {
+    currentLang = reply.lang;
+    voice.setLang(currentLang);
+  }
+
+  try { await speak(reply.text, reply.lang || currentLang); } catch (err) { console.warn("Speech failed:", err); }
 
   clearTimeout(watchdog);
   el.send.disabled = false;
@@ -244,6 +290,15 @@ const voice = {
   paused: false,
   pending: null,
 
+  // switch the microphone language (applies on next listening restart)
+  setLang(lang) {
+    if (!this.rec) return;
+    this.rec.lang = REC_LANGS[lang] || "en-US";
+    if (this.mode && !this.paused) {
+      try { this.rec.abort(); } catch { /* onend restarts with new lang */ }
+    }
+  },
+
   // speak anything the user said while PROSOPO was busy
   drainPending() {
     if (this.pending && !busy) {
@@ -264,7 +319,7 @@ const voice = {
     el.mic.hidden = false;
 
     this.rec = new SR();
-    this.rec.lang = "en-US";
+    this.rec.lang = REC_LANGS[currentLang] || "en-US";
     this.rec.continuous = true;
     this.rec.interimResults = true; // live "heard you" feedback
 

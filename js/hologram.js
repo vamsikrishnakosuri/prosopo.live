@@ -88,6 +88,12 @@ export class HologramFace {
     this.onPoke = null;
     this.pokeTime = -10;
     this.head = null;
+    this.wakeT = null; // materialize animation start time (null = pre-wake)
+  }
+
+  // classy power-on: dots coalesce from a coarse scatter into the face
+  wakeUp() {
+    this.wakeT = this.clock.getElapsedTime();
   }
 
   async init(onprogress) {
@@ -155,7 +161,7 @@ export class HologramFace {
       uniforms: {
         tSrc: { value: this.srcTexture },
         uSrcSize: { value: new THREE.Vector2(srcCanvas.width, srcCanvas.height) },
-        uPitch: { value: 4.0 },
+        uPitch: { value: 3.1 }, // denser, smaller dots — fewer gaps
         uTint: { value: new THREE.Color(EMOTIONS.neutral.color) },
         uTime: { value: 0 },
         uBoost: { value: 1.05 },
@@ -236,12 +242,29 @@ export class HologramFace {
     // pull the latest realistic frame into the dot shader
     if (this.srcTexture) this.srcTexture.needsUpdate = true;
 
+    // manual lip animation while the browser voice speaks
+    if (this.fakeTalk) {
+      const v = Math.abs(Math.sin(t * 9.2) * Math.sin(t * 5.1));
+      try {
+        this.head.setFixedValue("viseme_aa", 0.15 + v * 0.6);
+        this.head.setFixedValue("viseme_O", (1 - v) * 0.25);
+      } catch { /* morphs optional */ }
+    }
+
     const poke = Math.max(0, 1 - (t - this.pokeTime) / 1.0);
     this.emotionColor.lerp(this.targetColor, 1 - Math.exp(-dt * 3));
     this.faceMat.uniforms.uTime.value = t;
     this.faceMat.uniforms.uTint.value.copy(this.emotionColor);
-    this.faceMat.uniforms.uBoost.value = 1.05 + poke * 0.5 +
-      (this.state === "thinking" ? Math.sin(t * 6) * 0.1 : 0);
+
+    // materialization: before wake the face is a faint coarse scatter;
+    // on wake the dots tighten and brighten into place over ~1.8s
+    let wake = 1;
+    if (this.wakeT === null) wake = 0;
+    else wake = Math.min(1, (t - this.wakeT) / 1.8);
+    const easeW = wake * wake * (3 - 2 * wake);
+    this.faceMat.uniforms.uPitch.value = 3.1 + (1 - easeW) * 9.0;
+    this.faceMat.uniforms.uBoost.value = (0.25 + 0.8 * easeW) +
+      poke * 0.5 + (this.state === "thinking" ? Math.sin(t * 6) * 0.1 : 0);
 
     // gentle billboard float (TalkingHead moves the head inside the frame)
     this.facePlane.position.y = 0.12 + Math.sin(t * 0.8) * 0.008;
@@ -264,8 +287,17 @@ export class HologramFace {
     this.state = "idle";
   }
 
-  startFakeTalk() { this.state = "talking"; }
-  stopFakeTalk() { this.state = "idle"; }
+  // During browser-voice speech there is no audio stream to lip-sync to,
+  // so drive the avatar's viseme morphs directly.
+  startFakeTalk() { this.state = "talking"; this.fakeTalk = true; }
+  stopFakeTalk() {
+    this.state = "idle";
+    this.fakeTalk = false;
+    try {
+      this.head.setFixedValue("viseme_aa", null);
+      this.head.setFixedValue("viseme_O", null);
+    } catch { /* release best-effort */ }
+  }
   startThinking() { this.state = "thinking"; try { this.head.lookAt(320, 200, 900); } catch { /* opt */ } }
   stopThinking() { if (this.state === "thinking") this.state = "idle"; }
   setMood(m) { this.setEmotion(m); }

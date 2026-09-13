@@ -4,7 +4,14 @@
 
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm";
 const KOKORO_MODEL = "onnx-community/Kokoro-82M-v1.0-ONNX";
-const KOKORO_VOICE = "af_heart"; // natural female voice; see kokoro-js voice list
+
+// kokoro-js ships English voices only; other languages use the browser's
+// native speech voices (see speakFallback).
+export const KOKORO_VOICES = { en: "af_heart" };
+const FALLBACK_LOCALES = {
+  en: "en-US", es: "es-ES", fr: "fr-FR", hi: "hi-IN",
+  it: "it-IT", pt: "pt-BR", ja: "ja-JP", zh: "zh-CN",
+};
 
 export class SpeechEngine {
   constructor() {
@@ -64,8 +71,9 @@ export class SpeechEngine {
   // Generate speech with Kokoro. Returns { audio: AudioBuffer, words, wtimes, wdurations }
   // suitable for TalkingHead.speakAudio(). Word timings are estimated by
   // distributing audio duration across words weighted by word length.
-  async synthesizeKokoro(text) {
-    const result = await this.kokoro.generate(text, { voice: KOKORO_VOICE });
+  async synthesizeKokoro(text, lang = "en") {
+    const voice = KOKORO_VOICES[lang] || KOKORO_VOICES.en;
+    const result = await this.kokoro.generate(text, { voice });
     const ctx = this.ensureAudioCtx();
     const samples = result.audio; // Float32Array
     const rate = result.sampling_rate;
@@ -77,16 +85,22 @@ export class SpeechEngine {
     return { audio: buffer, words, wtimes, wdurations };
   }
 
-  // Fallback: plain browser speechSynthesis (no lip-sync data).
-  speakFallback(text) {
+  // Browser speechSynthesis — used for non-English languages (and as a
+  // last resort when Kokoro can't run). Picks a female voice for the
+  // requested language when one exists.
+  speakFallback(text, lang = "en") {
     return new Promise((resolve) => {
       try {
         const u = new SpeechSynthesisUtterance(text);
         u.rate = 1.0;
-        u.pitch = 1.0;
+        u.pitch = 1.05;
+        u.lang = FALLBACK_LOCALES[lang] || lang;
         const voices = speechSynthesis.getVoices();
-        const preferred = voices.find((v) => /en[-_]/i.test(v.lang) && /female|zira|aria|jenny/i.test(v.name))
-          || voices.find((v) => /en[-_]/i.test(v.lang));
+        const inLang = voices.filter((v) => v.lang.toLowerCase().startsWith(lang));
+        const preferred =
+          inLang.find((v) => /female|mujer|femme|donna|feminina|女|zira|aria|jenny|helena|paulina|amelie|elsa|kyoko|ting/i.test(v.name)) ||
+          inLang.find((v) => /google/i.test(v.name)) ||
+          inLang[0];
         if (preferred) u.voice = preferred;
         u.onend = resolve;
         u.onerror = resolve;
