@@ -92,7 +92,10 @@ export class SpeechEngine {
   // avatar's lips animating (non-Latin text yields no visemes).
   async synthesizeRemote(text, lang) {
     const ctx = this.ensureAudioCtx();
-    const chunks = splitTtsChunks(text, 170);
+    // the remote voice spells ALL-CAPS words letter by letter (P-R-O-S-O-P-O)
+    const speakable = text.replace(/\b[A-Z]{2,}\b/g,
+      (w) => w.charAt(0) + w.slice(1).toLowerCase());
+    const chunks = splitTtsChunks(speakable, 170);
     const buffers = await Promise.all(chunks.map(async (chunk) => {
       const res = await fetch(`/api/tts?lang=${lang}&q=${encodeURIComponent(chunk)}`);
       if (!res.ok) throw new Error(`tts ${res.status}`);

@@ -95,6 +95,9 @@ function addMsg(text, who) {
 
 function showSubtitle(text) {
   if (!text) { el.subtitle.hidden = true; return; }
+  // when the chat panel is open the text is already on screen — a big
+  // subtitle on top just covers the face (worst on phones)
+  if (!el.chatPanel.hidden) return;
   el.subtitle.textContent = text;
   el.subtitle.hidden = false;
 }
@@ -449,5 +452,20 @@ const voice = {
     el.mic.querySelector(".dock-label").textContent = this.mode ? "Listening" : "Voice";
   },
 };
+
+// ---------- anonymous user counter (a single number, nothing else) ----------
+(async () => {
+  try {
+    const firstVisit = !localStorage.getItem("prosopo_counted");
+    const res = await fetch(`/api/stats${firstVisit ? "?hit=1" : ""}`);
+    const { users } = await res.json();
+    if (firstVisit) { try { localStorage.setItem("prosopo_counted", "1"); } catch { /* ok */ } }
+    if (users) {
+      const elc = document.getElementById("user-count");
+      elc.textContent = `${users.toLocaleString()} HUMANS TALK TO PROSOPO`;
+      elc.hidden = false;
+    }
+  } catch { /* vanity metric — never break the app for it */ }
+})();
 
 boot();

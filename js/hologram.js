@@ -22,6 +22,8 @@ const AVATAR_URL = "/assets/avatar.glb";
 // hidden realistic render size (smaller on low-memory devices)
 const SRC_W = LITE_MODE ? 460 : 640;
 const SRC_H = LITE_MODE ? 590 : 820;
+// dot pitch scales with the source so phones get the same fine dot density
+const BASE_PITCH = LITE_MODE ? 2.25 : 3.1;
 
 export const EMOTIONS = {
   neutral:   { color: 0xd6ecff, mood: "neutral" },
@@ -165,7 +167,7 @@ export class HologramFace {
       uniforms: {
         tSrc: { value: this.srcTexture },
         uSrcSize: { value: new THREE.Vector2(srcCanvas.width, srcCanvas.height) },
-        uPitch: { value: 3.1 }, // denser, smaller dots — fewer gaps
+        uPitch: { value: BASE_PITCH },
         uTint: { value: new THREE.Color(EMOTIONS.neutral.color) },
         uTime: { value: 0 },
         uBoost: { value: 1.05 },
@@ -281,7 +283,7 @@ export class HologramFace {
     if (this.wakeT === null) wake = 0;
     else wake = Math.min(1, (t - this.wakeT) / 1.8);
     const easeW = wake * wake * (3 - 2 * wake);
-    this.faceMat.uniforms.uPitch.value = 3.1 + (1 - easeW) * 9.0;
+    this.faceMat.uniforms.uPitch.value = BASE_PITCH + (1 - easeW) * 9.0;
     this.faceMat.uniforms.uBoost.value = (0.25 + 0.8 * easeW) +
       poke * 0.5 + (this.state === "thinking" ? Math.sin(t * 6) * 0.1 : 0);
 

@@ -26,6 +26,8 @@ const MIME = {
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
   ".json": "application/json",
+  ".xml": "application/xml",
+  ".txt": "text/plain; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".svg": "image/svg+xml",
@@ -78,6 +80,19 @@ const server = http.createServer(async (req, res) => {
       console.error("tts:", err.message);
       res.writeHead(502, { "Content-Type": "application/json" })
         .end(JSON.stringify({ error: "TTS unavailable" }));
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/stats") {
+    try {
+      const hit = url.searchParams.get("hit") === "1";
+      const r = await fetch(`https://abacus.jasoncameron.dev/${hit ? "hit" : "get"}/prosopo.live/visitors`);
+      const data = await r.json();
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" })
+        .end(JSON.stringify({ users: data.value ?? 0 }));
+    } catch {
+      res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ users: null }));
     }
     return;
   }

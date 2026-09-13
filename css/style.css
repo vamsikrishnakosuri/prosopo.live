@@ -383,6 +383,19 @@ html, body {
   font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 1px;
   margin-top: 10px;
 }
+.wake-count {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 2px;
+  color: var(--neon);
+  text-shadow: 0 0 10px var(--neon-soft);
+}
+.wake-count[hidden] { display: none; }
+.wake-about {
+  max-width: min(560px, 86vw);
+  text-align: center;
+  font-size: 12px; line-height: 1.6;
+  color: var(--text-dim);
+  margin-top: 14px;
+}
 
 .hint {
   text-align: center;
@@ -394,12 +407,16 @@ html, body {
 
 @media (max-width: 640px) {
   .logo { font-size: 15px; letter-spacing: 2px; }
-  .subtitle { font-size: 15px; bottom: 130px; }
+  .subtitle {
+    font-size: 13px; bottom: 150px;
+    max-height: 5.6em; overflow: hidden;
+  }
+  .chat-log { max-height: 30vh; }
+  .msg { font-size: 13px; }
   .status { font-size: 10px; padding: 5px 10px; }
   .wake-title { font-size: 24px; letter-spacing: 5px; }
   .wake-btn { padding: 12px 20px; font-size: 12px; }
   .loader-scene { transform: scale(0.85); }
-  .chat-log { max-height: 38vh; }
   .dock-btn { padding: 9px 16px; font-size: 12px; }
   .hint { font-size: 9px; padding: 0 12px; }
 }
